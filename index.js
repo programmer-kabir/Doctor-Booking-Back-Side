@@ -68,7 +68,7 @@ async function run() {
       }
       next();
     };
-    // User
+    // User api
     app.post("/users", async (req, res) => {
       const user = req.body;
       // console.log(user);

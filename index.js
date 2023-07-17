@@ -46,6 +46,7 @@ async function run() {
 
     const usersCollection = client.db("Bokking").collection("users");
     const servicesCollection = client.db("Bokking").collection("services");
+    const selectedCollection = client.db("Bokking").collection("selected");
 
     // jwt
     app.post("/jwt", async (req, res) => {
@@ -118,12 +119,61 @@ async function run() {
     });
 
     // Selected service
-    app.post('/selected', async(req, res) =>{
-    const data = req.body;
-    const result = await servicesCollection.insertOne(data)
-    console.log(result);      
-    })
+    // app.post('/selected', async(req, res) =>{
+    // const data = req.body;
+    // const query = { email: data.email }
+    // if (existingData) {
+    //   return res.send({ message: "user already exist" });
+    // }
+    // const result = await servicesCollection.insertOne(data)
+    // console.log(result);
+    // })
+    // app.post("/selected", async (req, res) => {
+    //   const data = req.body;
+    //   const query = { email: data.email };
+    //   const existingData = await servicesCollection.findOne(query);
+    //   if (existingData) {
+    //     // Update the quantity
+    //     const updatedQuantity = existingData.quantity + data.quantity;
+    //     const updateResult = await servicesCollection.updateOne(query, {
+    //       $set: { quantity: updatedQuantity },
+    //     });
+    //   }
 
+    //   const insertResult = await servicesCollection.insertOne(data);
+    //   res.send(insertResult);
+    // });
+
+    app.post("/selected", async (req, res) => {
+      const data = req.body;
+      const query = { email: data.email, serviceName: data.serviceName }; // Add serviceName to the query
+    
+      const existingData = await selectedCollection.findOne(query);
+      if (existingData) {
+        // Update the quantity
+        const updatedQuantity = existingData.quantity + data.quantity;
+        const updateResult = await selectedCollection.updateOne(query, {
+          $set: { quantity: updatedQuantity },
+        });
+        res.send(updateResult);
+      } else {
+        const insertResult = await selectedCollection.insertOne(data);
+        res.send(insertResult);
+        
+      }
+    });
+    
+
+
+    app.get("/selected", async (req, res) => {
+      const email = req.query.email;
+      if(!email){
+        res.send([])
+      }
+      const query = { email: email };
+      const result = await selectedCollection.find(query).toArray();
+      res.send(result);
+    });
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(

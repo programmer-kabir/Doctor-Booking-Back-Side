@@ -2,6 +2,7 @@ const express = require("express");
 const app = express();
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
+const SSLCommerzPayment = require("sslcommerz-lts");
 require("dotenv").config();
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const port = process.env.PORT || 5000;
@@ -38,6 +39,9 @@ const client = new MongoClient(uri, {
     deprecationErrors: true,
   },
 });
+const store_id = process.env.STORE_ID;
+const store_passwd = process.env.STORE_PASS;
+const is_live = false;
 
 async function run() {
   try {
@@ -47,7 +51,7 @@ async function run() {
     const usersCollection = client.db("Bokking").collection("users");
     const servicesCollection = client.db("Bokking").collection("services");
     const selectedCollection = client.db("Bokking").collection("selected");
-
+    const PaymentCollection = client.db("Bokking").collection("payment");
     // jwt
     app.post("/jwt", async (req, res) => {
       const user = req.body;
@@ -118,36 +122,10 @@ async function run() {
       res.send(result);
     });
 
-    // Selected service
-    // app.post('/selected', async(req, res) =>{
-    // const data = req.body;
-    // const query = { email: data.email }
-    // if (existingData) {
-    //   return res.send({ message: "user already exist" });
-    // }
-    // const result = await servicesCollection.insertOne(data)
-    // console.log(result);
-    // })
-    // app.post("/selected", async (req, res) => {
-    //   const data = req.body;
-    //   const query = { email: data.email };
-    //   const existingData = await servicesCollection.findOne(query);
-    //   if (existingData) {
-    //     // Update the quantity
-    //     const updatedQuantity = existingData.quantity + data.quantity;
-    //     const updateResult = await servicesCollection.updateOne(query, {
-    //       $set: { quantity: updatedQuantity },
-    //     });
-    //   }
-
-    //   const insertResult = await servicesCollection.insertOne(data);
-    //   res.send(insertResult);
-    // });
-
     app.post("/selected", async (req, res) => {
       const data = req.body;
       const query = { email: data.email, serviceName: data.serviceName }; // Add serviceName to the query
-    
+
       const existingData = await selectedCollection.findOne(query);
       if (existingData) {
         // Update the quantity
@@ -159,21 +137,115 @@ async function run() {
       } else {
         const insertResult = await selectedCollection.insertOne(data);
         res.send(insertResult);
-        
       }
     });
-    
-
 
     app.get("/selected", async (req, res) => {
       const email = req.query.email;
-      if(!email){
-        res.send([])
+      if (!email) {
+        res.send([]);
       }
       const query = { email: email };
       const result = await selectedCollection.find(query).toArray();
       res.send(result);
     });
+
+    // PAYMENT GETAWAYS
+    const tran_id = new ObjectId().toString()
+    app.post("/payment", async (req, res) => {
+      const body = req.body;
+      // console.log(body);
+      const service = await servicesCollection.findOne({
+        _id: new ObjectId(body.serviceId),
+      });
+      
+      const data = {
+        total_amount: service?.price,
+        currency: body?.currency,
+        tran_id: tran_id, 
+        success_url: `http://localhost:5000/payment/success/${tran_id}`,
+        fail_url: `http://localhost:5000/payment/fail/${tran_id}`,
+        cancel_url: "http://localhost:3030/cancel",
+        ipn_url: "http://localhost:3030/ipn",
+        shipping_method: "Courier",
+        product_name: "Computer.",
+        product_category: "Electronic",
+        product_profile: "general",
+        cus_name: body?.name,
+        cus_email: body?.email,
+        cus_add1: body?.address,
+        cus_add2: "Dhaka",
+        cus_city: "Dhaka",
+        cus_state: "Dhaka",
+        cus_postcode: body?.code,
+        cus_country: "Bangladesh",
+        cus_phone: body?.number,
+        cus_fax: "01711111111",
+        ship_name: "Customer Name",
+        ship_add1: "Dhaka",
+        ship_add2: "Dhaka",
+        ship_city: "Dhaka",
+        ship_state: "Dhaka",
+        ship_postcode: 1000,
+        ship_country: "Bangladesh",
+      };
+      console.log(body);
+      // console.log(data);
+      const sslcz = new SSLCommerzPayment(store_id, store_passwd, is_live)
+      sslcz.init(data).then(apiResponse => {
+          // Redirect the user to payment gateway
+          let GatewayPageURL = apiResponse.GatewayPageURL
+          res.send({url:GatewayPageURL})
+          // console.log('Redirecting to: ', GatewayPageURL)
+      });
+
+      const finalOrder = {
+        service,
+        paidStatus: false,
+        transitionID: tran_id,
+      };
+      const result = PaymentCollection.insertOne(finalOrder);
+      app.post("/payment/success/:tranId", async (req, res) => {
+        console.log(req.params.tranId);
+        const result = await PaymentCollection.updateOne(
+          { transitionID: req.params.tranId },
+          {
+            $set: {
+              paidStatus: true,
+            },
+          }
+        );
+
+        
+        if (result.modifiedCount > 0) {
+          const result1 = await servicesCollection.updateOne(
+            {serviceId: service.serviceId},
+            {
+              $inc: {
+                availableSlots: -1,
+              },
+            }
+          );
+          // console.log(result1);
+          res.redirect(
+            `http://localhost:5173/dashboard/payment/success/${req.params.tranId}`
+          );
+        }
+      });
+
+      app.post("/payment/fail/:tranId", async (req, res) => {
+        const result = await PaymentCollection.deleteOne({
+          transitionID: req.params.tranId,
+        });
+        if (result.deletedCount) {
+          res.redirect(
+            `http://localhost:5173/dashboard/payment/fail/${req.params.tranId}`
+          );
+        }
+      });
+
+    })
+
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(

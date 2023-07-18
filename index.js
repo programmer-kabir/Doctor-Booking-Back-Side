@@ -140,6 +140,7 @@ async function run() {
       }
     });
 
+    // selected Service
     app.get("/selected", async (req, res) => {
       const email = req.query.email;
       if (!email) {
@@ -150,15 +151,26 @@ async function run() {
       res.send(result);
     });
 
+    app.delete("/selected/:id", async (req, res) => {
+      const id = req.params.id;
+      console.log(id);
+      const query = { _id: new ObjectId(id) };
+      const result = await selectedCollection.deleteOne(query);
+      // res.send(result);
+      console.log(result);
+    });
+
     // PAYMENT GETAWAYS
     const tran_id = new ObjectId().toString()
     app.post("/payment", async (req, res) => {
       const body = req.body;
-      // console.log(body);
+      console.log(body);
       const service = await servicesCollection.findOne({
         _id: new ObjectId(body.serviceId),
       });
-      
+      const selected= await selectedCollection.findOne({
+        _id: new ObjectId(body.selectId),
+      });
       const data = {
         total_amount: service?.price,
         currency: body?.currency,
@@ -189,7 +201,7 @@ async function run() {
         ship_postcode: 1000,
         ship_country: "Bangladesh",
       };
-      console.log(body);
+      // console.log(body);
       // console.log(data);
       const sslcz = new SSLCommerzPayment(store_id, store_passwd, is_live)
       sslcz.init(data).then(apiResponse => {
@@ -206,14 +218,15 @@ async function run() {
       };
       const result = PaymentCollection.insertOne(finalOrder);
       app.post("/payment/success/:tranId", async (req, res) => {
-        console.log(req.params.tranId);
+        // console.log(req.params.tranId);
         const result = await PaymentCollection.updateOne(
           { transitionID: req.params.tranId },
           {
             $set: {
               paidStatus: true,
             },
-          }
+          },
+          
         );
 
         
@@ -226,7 +239,10 @@ async function run() {
               },
             }
           );
-          // console.log(result1);
+          
+          
+          console.log(selected);
+          const deleteResult = await selectedCollection.deleteOne({ _id: selected._id });
           res.redirect(
             `http://localhost:5173/dashboard/payment/success/${req.params.tranId}`
           );
@@ -245,6 +261,7 @@ async function run() {
       });
 
     })
+
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });

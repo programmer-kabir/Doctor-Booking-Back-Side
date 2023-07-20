@@ -162,15 +162,19 @@ async function run() {
 
     // PAYMENT GETAWAYS
     const tran_id = new ObjectId().toString()
+    
     app.post("/payment", async (req, res) => {
       const body = req.body;
       console.log(body);
       const service = await servicesCollection.findOne({
         _id: new ObjectId(body.serviceId),
       });
+      
       const selected= await selectedCollection.findOne({
         _id: new ObjectId(body.selectId),
       });
+      const email = selected.email;
+      // console.log(selected);
       const data = {
         total_amount: service?.price,
         currency: body?.currency,
@@ -213,10 +217,11 @@ async function run() {
 
       const finalOrder = {
         service,
+        email,
         paidStatus: false,
         transitionID: tran_id,
       };
-      const result = PaymentCollection.insertOne(finalOrder);
+      const PaymentPostResult =  PaymentCollection.insertOne(finalOrder);
       app.post("/payment/success/:tranId", async (req, res) => {
         // console.log(req.params.tranId);
         const result = await PaymentCollection.updateOne(
@@ -228,24 +233,26 @@ async function run() {
           },
           
         );
-
+          console.log(result);
         
         if (result.modifiedCount > 0) {
-          const result1 = await servicesCollection.updateOne(
-            {serviceId: service.serviceId},
-            {
-              $inc: {
-                availableSlots: -1,
-              },
-            }
-          );
-          
-          
-          console.log(selected);
-          const deleteResult = await selectedCollection.deleteOne({ _id: selected._id });
+          // const result1 = await servicesCollection.updateOne(
+          //   {_id: service._id},
+          //   {
+          //     $inc: {
+          //       availableSlots: -1,
+          //     },
+          //   }
+          // );
+          // console.log(result1);
+          // const deleteResult = await selectedCollection.deleteOne({ _id: selected._id });
+          // console.log(deleteResult);
           res.redirect(
             `http://localhost:5173/dashboard/payment/success/${req.params.tranId}`
           );
+        }
+        else{
+          res.send([])
         }
       });
 
@@ -262,6 +269,23 @@ async function run() {
 
     })
 
+    app.get("/selected", async (req, res) => {
+      const email = req.query.email;
+      if (!email) {
+        res.send([]);
+      }
+      const query = { email: email };
+      const result = await selectedCollection.find(query).toArray();
+      res.send(result);
+    });
+
+    app.get('/payment', async(req, res) =>{
+      const email = req.query.email;
+      // console.log(email);
+      
+      const result = await PaymentCollection.find({email}).toArray()
+      res.send(result)
+    })
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });

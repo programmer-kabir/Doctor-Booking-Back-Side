@@ -162,7 +162,6 @@ async function run() {
 
     // PAYMENT GETAWAYS
     const tran_id = new ObjectId().toString()
-    
     app.post("/payment", async (req, res) => {
       const body = req.body;
       console.log(body);
@@ -221,7 +220,7 @@ async function run() {
         paidStatus: false,
         transitionID: tran_id,
       };
-      const PaymentPostResult =  PaymentCollection.insertOne(finalOrder);
+      const PaymentPostResult = await  PaymentCollection.insertOne(finalOrder);
       app.post("/payment/success/:tranId", async (req, res) => {
         // console.log(req.params.tranId);
         const result = await PaymentCollection.updateOne(
@@ -236,16 +235,16 @@ async function run() {
           console.log(result);
         
         if (result.modifiedCount > 0) {
-          // const result1 = await servicesCollection.updateOne(
-          //   {_id: service._id},
-          //   {
-          //     $inc: {
-          //       availableSlots: -1,
-          //     },
-          //   }
-          // );
+          const result1 = await servicesCollection.updateOne(
+            {_id: service._id},
+            {
+              $inc: {
+                availableSlots: -1,
+              },
+            }
+          );
           // console.log(result1);
-          // const deleteResult = await selectedCollection.deleteOne({ _id: selected._id });
+          const deleteResult = await selectedCollection.deleteOne({ _id: selected._id });
           // console.log(deleteResult);
           res.redirect(
             `http://localhost:5173/dashboard/payment/success/${req.params.tranId}`
